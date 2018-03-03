@@ -2,7 +2,6 @@ package shelter
 
 import (
 	"encoding/json"
-	"fmt"
 	"log"
 	"net/http"
 	"sort"
@@ -31,18 +30,46 @@ func ServeAPI(c *http.Client) error {
 }
 
 func (c *Client) getAnimals(w http.ResponseWriter, r *http.Request) {
-	// getCats()
-	dogs, err := c.getDogs()
-	d, err := json.Marshal(dogs)
+	a := make([]Animal, 0)
+	errorCount := 0
+
+	dogs, dErr := c.getDogs()
+	if dErr == nil {
+		a = append(a, dogs...)
+	} else {
+		log.Printf("Error getting dogs: %s", dErr.Error())
+		errorCount++
+	}
+
+	cats, cErr := c.getCats()
+	if cErr == nil {
+		a = append(a, cats...)
+	} else {
+		log.Printf("Error getting dogs: %s", cErr.Error())
+		errorCount++
+	}
+
+	hams, hErr := c.getHamsters()
+	if hErr == nil {
+		a = append(a, hams...)
+	} else {
+		log.Printf("Error getting hamsters: %s", hErr.Error())
+		errorCount++
+	}
+
+	if errorCount == 3 {
+		w.WriteHeader(http.StatusBadGateway)
+		return
+	}
+
+	b, err := json.Marshal(a)
 	if err != nil {
-		fmt.Fprintln(w, err.Error())
+		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 
 	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
-	w.Write(d)
-
-	// getHamster()
+	w.Write(b)
 }
 
 func (c *Client) getDogs() ([]Animal, error) {
@@ -75,87 +102,79 @@ func (c *Client) getDogs() ([]Animal, error) {
 	return dogs.Values.ToAnimals(), nil
 }
 
-// func getCats() {
-// 	client := &http.Client{}
-// 	resp, err := client.Get("https://apigateway.test.lifeworks.com/rescue-shelter-api/cats")
-//
-// 	if err != nil {
-// 		log.Printf("Error doing get: %s", err.Error())
-// 		return
-// 	}
-//
-// 	defer resp.Body.Close()
-//
-// 	var cats CatList
-//
-// 	if err = json.NewDecoder(resp.Body).Decode(&cats); err != nil {
-// 		log.Printf("Error reading json: %s", err.Error())
-// 		return
-// 	}
-//
-// 	group := make(map[string][]Cat)
-// 	for _, c := range cats.Values {
-// 		t, err := time.Parse("2006-01-02", c.DOB)
-// 		if err != nil {
-// 			log.Printf("Error parsing time %s", err.Error())
-// 			return
-// 		}
-//
-// 		c.Age = t
-// 		switch c.Colour {
-// 		case "ginger":
-// 			group["ginger"] = append(group["ginger"], c)
-// 		case "black":
-// 			group["black"] = append(group["black"], c)
-// 		default:
-// 			group["other"] = append(group["other"], c)
-// 		}
-// 	}
-//
-// 	for _, value := range group {
-// 		sort.Sort(Cats(value))
-// 	}
-//
-// 	for key, v := range group {
-// 		for _, i := range v {
-// 			log.Println(key)
-// 			log.Println(i.Forename)
-// 			log.Println(i.DOB)
-// 		}
-// 	}
-// }
-//
-// func getHamster() {
-// 	client := &http.Client{}
-// 	resp, err := client.Get("https://apigateway.test.lifeworks.com/rescue-shelter-api/hamsters")
-//
-// 	if err != nil {
-// 		log.Printf("Error doing get: %s", err.Error())
-// 		return
-// 	}
-//
-// 	defer resp.Body.Close()
-//
-// 	var hamsters HamsterList
-// 	if err = json.NewDecoder(resp.Body).Decode(&hamsters); err != nil {
-// 		log.Printf("Error reading json: %s", err.Error())
-// 		return
-// 	}
-//
-// 	for _, dog := range hamsters.Values {
-// 		t, err := time.Parse("2006-01-02", dog.DOB)
-// 		if err != nil {
-// 			log.Printf("Error parsing time %s", err.Error())
-// 			return
-// 		}
-//
-// 		dog.Age = t
-// 	}
-//
-// 	sort.Sort(Hamsters(hamsters.Values))
-//
-// 	for _, dog := range hamsters.Values {
-// 		log.Println(dog.Forename)
-// 		log.Println(dog.DOB)
-// 	}
-// }
+func (c *Client) getCats() ([]Animal, error) {
+	resp, err := c.client.Get(c.baseURL + "/cats")
+	if err != nil {
+		log.Printf("Error doing get: %s", err.Error())
+		return nil, err
+	}
+
+	defer resp.Body.Close()
+
+	var cats CatList
+	if err = json.NewDecoder(resp.Body).Decode(&cats); err != nil {
+		log.Printf("Error reading json: %s", err.Error())
+		return nil, err
+	}
+
+	group := make(map[string]Cats)
+
+	for _, cat := range cats.Values {
+		t, err := time.Parse("2006-01-02", cat.DOB)
+		if err != nil {
+			log.Printf("Error parsing time %s", err.Error())
+			return nil, err
+		}
+
+		cat.Age = t
+
+		switch cat.Colour {
+		case "ginger":
+			group["ginger"] = append(group["ginger"], cat)
+		case "black":
+			group["black"] = append(group["black"], cat)
+		default:
+			group["other"] = append(group["other"], cat)
+		}
+	}
+
+	for _, value := range group {
+		sort.Sort(Cats(value))
+	}
+
+	result := make([]Animal, 0)
+	result = append(result, group["ginger"].ToAnimals()...)
+	result = append(result, group["black"].ToAnimals()...)
+	result = append(result, group["other"].ToAnimals()...)
+
+	return result, nil
+}
+
+func (c *Client) getHamsters() ([]Animal, error) {
+	resp, err := c.client.Get(c.baseURL + "/hamsters")
+	if err != nil {
+		log.Printf("Error doing get: %s", err.Error())
+		return nil, err
+	}
+
+	defer resp.Body.Close()
+
+	var hams HamsterList
+	if err = json.NewDecoder(resp.Body).Decode(&hams); err != nil {
+		log.Printf("Error reading json: %s", err.Error())
+		return nil, err
+	}
+
+	for _, ham := range hams.Values {
+		t, err := time.Parse("2006-01-02", ham.DOB)
+		if err != nil {
+			log.Printf("Error parsing time %s", err.Error())
+			return nil, err
+		}
+
+		ham.Age = t
+	}
+
+	sort.Sort(Hamsters(hams.Values))
+	return hams.Values.ToAnimals(), nil
+}

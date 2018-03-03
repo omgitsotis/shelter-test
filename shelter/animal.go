@@ -5,7 +5,8 @@ type Image struct {
 }
 
 type Animal struct {
-	Name string `json:"name"`
-	Age string `json:"age"`
+	Name  string `json:"name"`
+	Age   string `json:"age"`
 	Image string `json:"image"`
+	Type  string `json:"type"`
 }

@@ -10,7 +10,6 @@ type Dog struct {
 	Surname  string `json:"surname"`
 	DOB      string `json:"dateOfBirth"`
 	Image    Image  `json:"image"`
-	Colour   string `json:"colour"`
 	Age      time.Time
 }
 
@@ -50,6 +49,7 @@ func (d Dogs) ToAnimals() []Animal {
 			Name:  name,
 			Age:   age,
 			Image: dog.Image.URL,
+			Type:  "Dog",
 		}
 
 		ani = append(ani, animal)
