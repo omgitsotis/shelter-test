@@ -33,34 +33,43 @@ func (c *Client) getAnimals(w http.ResponseWriter, r *http.Request) {
 	a := make([]Animal, 0)
 	errorCount := 0
 
-	dogs, dErr := c.getDogs()
-	if dErr == nil {
-		a = append(a, dogs...)
-	} else {
-		log.Printf("Error getting dogs: %s", dErr.Error())
-		errorCount++
-	}
+	dogsChan := make(chan []Animal)
+	hamsChan := make(chan []Animal)
+	catsChan := make(chan []Animal)
 
-	cats, cErr := c.getCats()
-	if cErr == nil {
-		a = append(a, cats...)
-	} else {
-		log.Printf("Error getting dogs: %s", cErr.Error())
-		errorCount++
-	}
+	errChan := make(chan error)
 
-	hams, hErr := c.getHamsters()
-	if hErr == nil {
-		a = append(a, hams...)
-	} else {
-		log.Printf("Error getting hamsters: %s", hErr.Error())
-		errorCount++
+	go c.getDogs(dogsChan, errChan)
+	go c.getCats(catsChan, errChan)
+	go c.getHamsters(hamsChan, errChan)
+
+	group := make(map[string][]Animal)
+
+	for i := 0; i < 3; i++ {
+		select {
+		case dogs := <-dogsChan:
+			log.Println("Dogs complete")
+			group["dogs"] = dogs
+		case cats := <-catsChan:
+			log.Println("Cats complete")
+			group["cats"] = cats
+		case hamster := <-hamsChan:
+			log.Println("Hamster complete")
+			group["hamster"] = hamster
+		case <-errChan:
+			log.Println("Recieved error")
+			errorCount++
+		}
 	}
 
 	if errorCount == 3 {
 		w.WriteHeader(http.StatusBadGateway)
 		return
 	}
+
+	a = append(a, group["dogs"]...)
+	a = append(a, group["cats"]...)
+	a = append(a, group["hamster"]...)
 
 	b, err := json.Marshal(a)
 	if err != nil {
@@ -72,12 +81,13 @@ func (c *Client) getAnimals(w http.ResponseWriter, r *http.Request) {
 	w.Write(b)
 }
 
-func (c *Client) getDogs() ([]Animal, error) {
+func (c *Client) getDogs(r chan<- []Animal, e chan<- error) {
 	resp, err := c.client.Get(c.baseURL + "/dogs")
 
 	if err != nil {
 		log.Printf("Error doing get: %s", err.Error())
-		return nil, err
+		e <- err
+		return
 	}
 
 	defer resp.Body.Close()
@@ -85,28 +95,31 @@ func (c *Client) getDogs() ([]Animal, error) {
 	var dogs DogList
 	if err = json.NewDecoder(resp.Body).Decode(&dogs); err != nil {
 		log.Printf("Error reading json: %s", err.Error())
-		return nil, err
+		e <- err
+		return
 	}
 
 	for _, dog := range dogs.Values {
 		t, err := time.Parse("2006-01-02", dog.DOB)
 		if err != nil {
 			log.Printf("Error parsing time %s", err.Error())
-			return nil, err
+			e <- err
+			return
 		}
 
 		dog.Age = t
 	}
 
 	sort.Sort(Dogs(dogs.Values))
-	return dogs.Values.ToAnimals(), nil
+	r <- dogs.Values.ToAnimals()
 }
 
-func (c *Client) getCats() ([]Animal, error) {
+func (c *Client) getCats(r chan<- []Animal, e chan<- error) {
 	resp, err := c.client.Get(c.baseURL + "/cats")
 	if err != nil {
 		log.Printf("Error doing get: %s", err.Error())
-		return nil, err
+		e <- err
+		return
 	}
 
 	defer resp.Body.Close()
@@ -114,7 +127,8 @@ func (c *Client) getCats() ([]Animal, error) {
 	var cats CatList
 	if err = json.NewDecoder(resp.Body).Decode(&cats); err != nil {
 		log.Printf("Error reading json: %s", err.Error())
-		return nil, err
+		e <- err
+		return
 	}
 
 	group := make(map[string]Cats)
@@ -123,7 +137,8 @@ func (c *Client) getCats() ([]Animal, error) {
 		t, err := time.Parse("2006-01-02", cat.DOB)
 		if err != nil {
 			log.Printf("Error parsing time %s", err.Error())
-			return nil, err
+			e <- err
+			return
 		}
 
 		cat.Age = t
@@ -147,14 +162,15 @@ func (c *Client) getCats() ([]Animal, error) {
 	result = append(result, group["black"].ToAnimals()...)
 	result = append(result, group["other"].ToAnimals()...)
 
-	return result, nil
+	r <- result
 }
 
-func (c *Client) getHamsters() ([]Animal, error) {
+func (c *Client) getHamsters(r chan<- []Animal, e chan<- error) {
 	resp, err := c.client.Get(c.baseURL + "/hamsters")
 	if err != nil {
 		log.Printf("Error doing get: %s", err.Error())
-		return nil, err
+		e <- err
+		return
 	}
 
 	defer resp.Body.Close()
@@ -162,19 +178,21 @@ func (c *Client) getHamsters() ([]Animal, error) {
 	var hams HamsterList
 	if err = json.NewDecoder(resp.Body).Decode(&hams); err != nil {
 		log.Printf("Error reading json: %s", err.Error())
-		return nil, err
+		e <- err
+		return
 	}
 
 	for _, ham := range hams.Values {
 		t, err := time.Parse("2006-01-02", ham.DOB)
 		if err != nil {
 			log.Printf("Error parsing time %s", err.Error())
-			return nil, err
+			e <- err
+			return
 		}
 
 		ham.Age = t
 	}
 
 	sort.Sort(Hamsters(hams.Values))
-	return hams.Values.ToAnimals(), nil
+	r <- hams.Values.ToAnimals()
 }
