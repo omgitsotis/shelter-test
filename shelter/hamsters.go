@@ -28,7 +28,7 @@ func (h Hamsters) Swap(i, j int) {
 }
 
 func (h Hamsters) Less(i, j int) bool {
-	return h[i].Age.Unix() < h[j].Age.Unix()
+	return h[i].Age.Unix() > h[j].Age.Unix()
 }
 
 func (h Hamsters) ToAnimals() []Animal {

@@ -2,6 +2,7 @@ package shelter
 
 import (
 	"encoding/json"
+	"errors"
 	"log"
 	"net/http"
 	"sort"
@@ -15,15 +16,12 @@ type Client struct {
 	baseURL string
 }
 
-func NewClient(c *http.Client) *Client {
-	return &Client{
-		c,
-		"https://apigateway.test.lifeworks.com/rescue-shelter-api",
-	}
+func NewClient(uri string) *Client {
+	return &Client{&http.Client{}, uri}
 }
 
-func ServeAPI(c *http.Client) error {
-	client := NewClient(c)
+func ServeAPI(uri string) error {
+	client := NewClient(uri)
 	r := mux.NewRouter()
 	r.Methods("GET").Path("/animals").HandlerFunc(client.getAnimals)
 	return http.ListenAndServe(":4000", r)
@@ -83,10 +81,15 @@ func (c *Client) getAnimals(w http.ResponseWriter, r *http.Request) {
 
 func (c *Client) getDogs(r chan<- []Animal, e chan<- error) {
 	resp, err := c.client.Get(c.baseURL + "/dogs")
-
 	if err != nil {
 		log.Printf("Error doing get: %s", err.Error())
 		e <- err
+		return
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		log.Println("Error: status code not ok")
+		e <- errors.New("Status code not ok")
 		return
 	}
 
@@ -119,6 +122,12 @@ func (c *Client) getCats(r chan<- []Animal, e chan<- error) {
 	if err != nil {
 		log.Printf("Error doing get: %s", err.Error())
 		e <- err
+		return
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		log.Println("Error: status code not ok")
+		e <- errors.New("Status code not ok")
 		return
 	}
 
@@ -170,6 +179,12 @@ func (c *Client) getHamsters(r chan<- []Animal, e chan<- error) {
 	if err != nil {
 		log.Printf("Error doing get: %s", err.Error())
 		e <- err
+		return
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		log.Println("Error: status code not ok")
+		e <- errors.New("Status code not ok")
 		return
 	}
 
