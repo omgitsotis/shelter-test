@@ -11,15 +11,18 @@ import (
 	"github.com/gorilla/mux"
 )
 
+// Client is the client that connects to the rescue shelter API
 type Client struct {
 	client  *http.Client
 	baseURL string
 }
 
+// NewClient creates a new client with a given url for the rescue shelter API
 func NewClient(uri string) *Client {
 	return &Client{&http.Client{}, uri}
 }
 
+// ServeAPI creates a new client and serves the route to this API
 func ServeAPI(uri string) error {
 	client := NewClient(uri)
 	r := mux.NewRouter()
@@ -27,6 +30,7 @@ func ServeAPI(uri string) error {
 	return http.ListenAndServe(":4000", r)
 }
 
+// Get animals calls the three shelter API routes and sorts the results
 func (c *Client) getAnimals(w http.ResponseWriter, r *http.Request) {
 	a := make([]Animal, 0)
 	errorCount := 0
@@ -37,6 +41,7 @@ func (c *Client) getAnimals(w http.ResponseWriter, r *http.Request) {
 
 	errChan := make(chan error)
 
+	// Run each of the calls in their own thread
 	go c.getDogs(dogsChan, errChan)
 	go c.getCats(catsChan, errChan)
 	go c.getHamsters(hamsChan, errChan)
@@ -79,6 +84,7 @@ func (c *Client) getAnimals(w http.ResponseWriter, r *http.Request) {
 	w.Write(b)
 }
 
+// getDogs calls the dog API and sorts the results by age
 func (c *Client) getDogs(r chan<- []Animal, e chan<- error) {
 	resp, err := c.client.Get(c.baseURL + "/dogs")
 	if err != nil {
@@ -117,6 +123,7 @@ func (c *Client) getDogs(r chan<- []Animal, e chan<- error) {
 	r <- dogs.Values.ToAnimals()
 }
 
+// getCats calls the cats API and sorts the results by age
 func (c *Client) getCats(r chan<- []Animal, e chan<- error) {
 	resp, err := c.client.Get(c.baseURL + "/cats")
 	if err != nil {
@@ -174,6 +181,7 @@ func (c *Client) getCats(r chan<- []Animal, e chan<- error) {
 	r <- result
 }
 
+// getHamsters calls the hamsters API and sorts the results by age
 func (c *Client) getHamsters(r chan<- []Animal, e chan<- error) {
 	resp, err := c.client.Get(c.baseURL + "/hamsters")
 	if err != nil {
